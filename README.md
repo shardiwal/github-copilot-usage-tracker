@@ -330,4 +330,5 @@ MIT
 
 **Happy tracking! 📊**
 
-For more information, visit the [GitHub repository](https://github.com/yourusername/copilot-usage-tracker)
+For more information, visit the [GitHub repository](https://github.com/rshardiwal/github-copilot-usage-tracker)
+[Download VS Code Extension](copilot-usage-tracker-0.1.5.vsix)
