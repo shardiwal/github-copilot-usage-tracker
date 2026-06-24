@@ -13,7 +13,6 @@ dist/
 # VS Code
 .vscode/
 .vscode-test/
-*.vsix
 
 # Extension dependencies
 *.db
