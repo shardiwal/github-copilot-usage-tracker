@@ -39,24 +39,53 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       this.handleMessage(message, webviewView.webview);
     });
 
-    this.sendDashboardData(webviewView.webview).catch((error) => {
-      logger.error("Error sending initial dashboard data", error);
+    // Refresh when the panel becomes visible (e.g. user switches back to it)
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.sendDashboardData(webviewView.webview).catch((error) => {
+          logger.error("Error sending dashboard data on visibility change", error);
+        });
+      }
     });
 
-    // Auto-refresh dashboard every 30 seconds
-    setInterval(() => {
+    // Auto-refresh every 30 seconds while visible
+    const refreshInterval = setInterval(() => {
       if (this.view?.visible) {
         this.sendDashboardData(webviewView.webview).catch((error) => {
           logger.error("Error sending dashboard data on interval", error);
         });
       }
     }, 30000);
+
+    // Clean up interval when the view is disposed
+    webviewView.onDidDispose(() => {
+      clearInterval(refreshInterval);
+    });
+
+    // Do NOT send data immediately here — the webview HTML may not have
+    // finished loading yet.  Instead, dashboard.js fires "webviewReady"
+    // (handled in handleMessage) once DOMContentLoaded has fired.
+  }
+
+  /** Trigger a data refresh from outside (e.g. after a new record is saved). */
+  public refresh(): void {
+    if (this.view?.visible) {
+      this.sendDashboardData(this.view.webview).catch((error) => {
+        logger.error("Error sending dashboard data on external refresh", error);
+      });
+    }
   }
 
   private handleMessage(message: any, webview: vscode.Webview): void {
     switch (message.command) {
-      case "getData":
+      case "webviewReady":
+        // The webview DOM is ready — send initial data now
         this.sendDashboardData(webview).catch((error) => {
+          logger.error("Error sending initial dashboard data on ready", error);
+        });
+        break;
+      case "getData":
+        this.sendDashboardData(webview, message.filter ?? "today").catch((error) => {
           logger.error("Error sending dashboard data on demand", error);
         });
         break;
@@ -67,7 +96,17 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         vscode.commands.executeCommand("copilot-tracker.exportJson");
         break;
       case "clearHistory":
-        vscode.commands.executeCommand("copilot-tracker.clearHistory");
+        // The webview already showed a confirm() dialog, so clear directly
+        // and refresh — no second confirmation dialog needed.
+        this.database.clearUsageRecords()
+          .then(() => {
+            vscode.window.showInformationMessage("Usage history cleared successfully");
+            return this.sendDashboardData(webview);
+          })
+          .catch((error) => {
+            logger.error("Error clearing history from dashboard", error);
+            vscode.window.showErrorMessage("Error clearing history");
+          });
         break;
       case "backupDb":
         this.backupDatabase().catch((error) => {
@@ -77,12 +116,60 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async sendDashboardData(webview: vscode.Webview): Promise<void> {
+  private async sendDashboardData(webview: vscode.Webview, filter: string = "today"): Promise<void> {
     try {
-      const todayStats = await this.statistics.getTodayStats();
+      // Compute date range from filter
+      const now = new Date();
+      let startDate: string | undefined;
+      let endDate: string | undefined;
+
+      switch (filter) {
+        case "yesterday": {
+          const d = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const date = d.toISOString().split("T")[0];
+          startDate = `${date}T00:00:00`;
+          endDate = `${date}T23:59:59`;
+          break;
+        }
+        case "7days":
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "30days":
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "all":
+          // no date restriction
+          break;
+        default: { // "today"
+          const today = now.toISOString().split("T")[0];
+          startDate = `${today}T00:00:00`;
+          endDate = `${today}T23:59:59`;
+        }
+      }
+
+      const recordsFilter = startDate ? { startDate, endDate } : undefined;
+      // Date-filtered records → used only for summary stats
+      const filteredRecords = await this.database.getUsageRecords(recordsFilter, 500);
+      // All records (no date gate) → used for the history table
+      const allRecords = await this.database.getUsageRecords(undefined, 500);
+
+      // Compute stats directly from the filtered records
+      const totalInputTokens = filteredRecords.reduce((s, r) => s + (r.inputTokens || 0), 0);
+      const totalOutputTokens = filteredRecords.reduce((s, r) => s + (r.outputTokens || 0), 0);
+      const totalTokens = totalInputTokens + totalOutputTokens;
+      const totalCost = filteredRecords.reduce((s, r) => s + (r.cost || 0), 0);
+
+      const todayStats = {
+        totalTokens,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        requestCount: filteredRecords.length,
+        averageTokens: filteredRecords.length > 0 ? Math.round(totalTokens / filteredRecords.length) : 0,
+        cost: totalCost,
+      };
+
       const analytics = await this.statistics.getAnalytics();
       const chartData = await this.statistics.getChartData(30);
-      const records = await this.database.getUsageRecords(undefined, 100);
 
       webview.postMessage({
         command: "updateDashboard",
@@ -90,12 +177,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           todayStats,
           analytics,
           chartData,
+          totalCost,
         },
       });
 
       webview.postMessage({
         command: "dataRefreshed",
-        records,
+        records: allRecords,
       });
 
       logger.debug("Dashboard data sent to webview");
@@ -195,9 +283,8 @@ export async function showDashboard(
     provider["handleMessage"](message, panel.webview);
   });
 
-  provider["sendDashboardData"](panel.webview).catch((error) => {
-    logger.error("Error sending initial dashboard data in panel", error);
-  });
+  // Data is sent in response to the "webviewReady" message from dashboard.js
+  // (avoids sending before the DOM is ready and losing the message).
 
   // Auto-refresh dashboard
   const refreshInterval = setInterval(() => {

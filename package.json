@@ -95,7 +95,7 @@
         "name": "tracker",
         "fullName": "Copilot Usage Tracker",
         "description": "Ask Copilot via @tracker — every request/response is tracked and recorded",
-        "isSticky": false
+        "isSticky": true
       }
     ],
     "menus": {
@@ -163,11 +163,13 @@
     }
   },
   "scripts": {
+    "package": "vsce package",
     "vscode:prepublish": "npm run build",
     "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:sql.js --external:tiktoken --platform=node --format=cjs --minify && node scripts/copy-wasm.js",
     "dev": "node scripts/copy-wasm.js && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:sql.js --external:tiktoken --platform=node --format=cjs --watch",
     "lint": "eslint src --ext ts --fix",
-    "compile": "tsc -p ./"
+    "compile": "tsc -p ./",
+    "test:db": "node scripts/test-db.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

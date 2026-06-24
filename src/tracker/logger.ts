@@ -43,6 +43,11 @@ export class Logger {
     if (data !== undefined) {
       if (typeof data === "string") {
         this.outputChannel.appendLine(`  ${data}`);
+      } else if (data instanceof Error) {
+        this.outputChannel.appendLine(`  ${data.name}: ${data.message}`);
+        if (data.stack) {
+          this.outputChannel.appendLine(`  ${data.stack}`);
+        }
       } else {
         this.outputChannel.appendLine(`  ${JSON.stringify(data, null, 2)}`);
       }

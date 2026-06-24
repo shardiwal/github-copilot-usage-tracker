@@ -11,12 +11,15 @@ import { Database } from "../tracker/database";
 import { sessionManager } from "../tracker/sessionManager";
 import { DateUtils } from "../utils/date";
 import { logger } from "../tracker/logger";
+import { calculateCost } from "../tracker/costCalculator";
+import { DashboardProvider } from "../webview/dashboardProvider";
 
 export const PARTICIPANT_ID = "copilot-tracker.tracker";
 
 export function registerChatParticipant(
   context: vscode.ExtensionContext,
-  database: Database
+  database: Database,
+  dashboardProvider?: DashboardProvider
 ): void {
   const participant = vscode.chat.createChatParticipant(
     PARTICIPANT_ID,
@@ -26,7 +29,7 @@ export function registerChatParticipant(
       stream: vscode.ChatResponseStream,
       token: vscode.CancellationToken
     ) => {
-      await handleRequest(request, chatContext, stream, token, database);
+      await handleRequest(request, chatContext, stream, token, database, dashboardProvider);
     }
   );
 
@@ -40,18 +43,24 @@ async function handleRequest(
   chatContext: vscode.ChatContext,
   stream: vscode.ChatResponseStream,
   token: vscode.CancellationToken,
-  database: Database
+  database: Database,
+  dashboardProvider?: DashboardProvider
 ): Promise<void> {
-  // Select a Copilot language model
-  const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
-  if (!models.length) {
-    stream.markdown(
-      "⚠️ No Copilot language models available. Ensure GitHub Copilot is installed and signed in."
-    );
-    return;
+  // Use the model the user has selected in the Chat UI (available in VS Code 1.113+).
+  // Fall back to selectChatModels for older hosts.
+  let model: vscode.LanguageModelChat;
+  if (request.model) {
+    model = request.model;
+  } else {
+    const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
+    if (!models.length) {
+      stream.markdown(
+        "⚠️ No Copilot language models available. Ensure GitHub Copilot is installed and signed in."
+      );
+      return;
+    }
+    model = models[0];
   }
-
-  const model = models[0];
 
   // Build the message list: include prior turns for context, then the new user message
   const messages: vscode.LanguageModelChatMessage[] = [
@@ -105,6 +114,7 @@ async function handleRequest(
     );
 
     const totalTokens = inputTokens + outputTokens;
+    const cost = calculateCost(model.id, inputTokens, outputTokens);
 
     // Record in session
     sessionManager.recordTokenUsage(totalTokens);
@@ -115,33 +125,47 @@ async function handleRequest(
     const file = editor?.document.uri.fsPath || "unknown";
     const language = editor?.document.languageId || "unknown";
 
-    // Persist to database
-    const recordId = await database.addUsageRecord({
-      timestamp: DateUtils.toISOString(),
-      workspace,
-      language,
-      file,
-      prompt: request.prompt,
-      response: responseText,
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      duration,
-      sessionId: sessionManager.getCurrentSessionId(),
-    });
+    // Persist to database — run separately so a DB failure doesn't hide the response
+    let recordId: number | undefined;
+    try {
+      recordId = await database.addUsageRecord({
+        timestamp: DateUtils.toISOString(),
+        workspace,
+        language,
+        file,
+        prompt: request.prompt,
+        response: responseText,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        duration,
+        sessionId: sessionManager.getCurrentSessionId(),
+        model: model.id,
+        cost,
+      });
 
-    logger.info("@tracker recorded usage", {
-      recordId,
-      model: model.id,
-      inputTokens,
-      outputTokens,
-      totalTokens,
-    });
+      logger.info("@tracker recorded usage", {
+        recordId,
+        model: model.id,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+      });
+
+      // Notify dashboard to refresh immediately
+      dashboardProvider?.refresh();
+    } catch (dbError) {
+      logger.error("@tracker failed to save usage record to database", dbError);
+      vscode.window.showErrorMessage(
+        `Copilot Tracker: Failed to save usage record — ${dbError instanceof Error ? dbError.message : String(dbError)}`
+      );
+    }
 
     // Append token summary at the bottom of the chat response
+    const savedBadge = recordId !== undefined ? ` | 💾 saved #${recordId}` : " | ⚠️ not saved";
     stream.markdown(
       `\n\n---\n*Tracked — model: \`${model.name ?? model.id}\` | ` +
-        `tokens: ${inputTokens} in / ${outputTokens} out / **${totalTokens} total** | ${duration}ms*`
+        `tokens: ${inputTokens} in / ${outputTokens} out / **${totalTokens} total** | ${duration}ms${savedBadge}*`
     );
   } catch (error) {
     if (error instanceof vscode.LanguageModelError) {
@@ -149,7 +173,7 @@ async function handleRequest(
       stream.markdown(`⚠️ Copilot error: ${error.message}`);
     } else {
       logger.error("@tracker request failed", error);
-      stream.markdown("⚠️ An error occurred while processing your request.");
+      stream.markdown(`⚠️ An error occurred while processing your request: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

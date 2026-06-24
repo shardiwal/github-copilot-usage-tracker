@@ -18,8 +18,11 @@ try {
 
 // Event Listeners
 document.addEventListener("DOMContentLoaded", () => {
+  // Notify the extension that the webview is ready to receive messages.
+  // This replaces the old "send immediately" approach which caused data loss
+  // when messages arrived before the DOM was fully initialised.
+  vscode?.postMessage({ command: "webviewReady" });
   setupEventListeners();
-  refreshData();
   updateLastUpdated();
 });
 
@@ -70,7 +73,9 @@ function setupEventListeners() {
 }
 
 function refreshData() {
-  vscode?.postMessage({ command: "getData" });
+  const filterSelect = document.getElementById("filterSelect");
+  const filter = filterSelect ? filterSelect.value : "today";
+  vscode?.postMessage({ command: "getData", filter });
 }
 
 function updateLastUpdated() {
@@ -96,6 +101,7 @@ window.addEventListener("message", (event) => {
     case "dataRefreshed":
       allRecords = message.records || [];
       currentPage = 1;
+      updateLanguageFilter(allRecords);
       applyFiltersAndPaginate();
       break;
   }
@@ -120,6 +126,7 @@ function updateDashboard(data) {
       : "0";
   setText("inputTokensPercentage", `${inputPercentage}%`);
 
+  // Update output tokens
   setText("outputTokens", formatTokens(todayStats.outputTokens || 0));
   const outputPercentage =
     todayStats.totalTokens > 0
@@ -127,13 +134,14 @@ function updateDashboard(data) {
       : "0";
   setText("outputTokensPercentage", `${outputPercentage}%`);
 
+  // Update today's estimated cost (server-computed from filtered records)
+  setText("todayCost", formatCost(data.totalCost || 0));
+  setText("todayCostDetail", "estimated (subscription)");
+
   // Update top lists
   updateTopList("topLanguages", chartData.byLanguage);
   updateTopList("topWorkspaces", chartData.byWorkspace);
   updateTopList("topFiles", chartData.byFile);
-
-  // Update language filter
-  updateLanguageFilter(allRecords);
 
   updateLastUpdated();
 }
@@ -223,7 +231,7 @@ function updateHistoryTable() {
   tbody.innerHTML = "";
 
   if (pageRecords.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">No records found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">No records found</td></tr>';
   } else {
     pageRecords.forEach((record) => {
       const row = document.createElement("tr");
@@ -236,12 +244,19 @@ function updateHistoryTable() {
         hour12: false,
       });
 
+      // Truncate prompt to 60 chars for display; show full text in title
+      const promptText = record.prompt || "-";
+      const promptDisplay = promptText.length > 60 ? promptText.slice(0, 60) + "…" : promptText;
+
       row.innerHTML = `
         <td>${timestamp}</td>
+        <td>${record.model || "-"}</td>
         <td>${record.language || "-"}</td>
+        <td title="${escapeHtml(promptText)}" style="max-width:200px;overflow:hidden;white-space:nowrap;">${escapeHtml(promptDisplay)}</td>
         <td>${formatTokens(record.inputTokens || 0)}</td>
         <td>${formatTokens(record.outputTokens || 0)}</td>
         <td style="font-weight: 600; color: #0ea5e9;">${formatTokens(record.totalTokens || 0)}</td>
+        <td style="color: #22c55e;">${formatCost(record.cost || 0)}</td>
         <td>${record.duration ? formatDuration(record.duration) : "-"}</td>
       `;
       tbody.appendChild(row);
@@ -277,4 +292,20 @@ function formatDuration(ms) {
     return `${(ms / 1000).toFixed(1)}s`;
   }
   return `${(ms / 60000).toFixed(1)}m`;
+}
+
+function formatCost(cost) {
+  if (!cost || cost === 0) return "$0.00";
+  if (cost < 0.000001) return `$${cost.toExponential(2)}`;
+  if (cost < 0.01)     return `$${cost.toFixed(6)}`;
+  if (cost < 1)        return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

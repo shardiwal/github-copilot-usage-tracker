@@ -15,6 +15,8 @@ export interface UsageRecord {
   totalTokens: number;
   duration: number;
   sessionId: string;
+  model: string;
+  cost: number;
 }
 
 export interface SessionInfo {

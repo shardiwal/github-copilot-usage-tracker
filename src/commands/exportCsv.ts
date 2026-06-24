@@ -11,6 +11,18 @@ import { FormatUtils } from "../utils/format";
 import { ConfigUtils } from "../utils/config";
 import { logger } from "../tracker/logger";
 
+/**
+ * Exports all usage records and summary statistics to a CSV file.
+ *
+ * The file is written to the configured export directory with a filename
+ * in the format `copilot-usage-YYYY-MM-DD.csv`. After a successful export,
+ * the user is prompted to open the file or the containing folder.
+ *
+ * @param _context - The VS Code extension context (unused, reserved for future use).
+ * @param database - The {@link Database} instance used to retrieve usage records and token totals.
+ * @param statistics - The {@link Statistics} instance used to generate analytics for the summary section.
+ * @returns A promise that resolves when the export is complete or an error has been reported.
+ */
 export async function exportCsvCommand(
   _context: vscode.ExtensionContext,
   database: Database,

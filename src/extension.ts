@@ -19,11 +19,13 @@ import { UsageTreeProvider } from "./tree/usageTreeProvider";
 import { StatusBar } from "./statusbar/statusBar";
 import { DashboardProvider, showDashboard } from "./webview/dashboardProvider";
 import { registerChatParticipant } from "./chat/trackerParticipant";
+import { hookBridge } from "./hooks/hookBridge";
 
 let database: Database;
 let statistics: Statistics;
 let statusBar: StatusBar;
 let treeProvider: UsageTreeProvider;
+let dashboardProvider: DashboardProvider | undefined;
 let notificationThresholds: number[] = [];
 
 /**
@@ -46,8 +48,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     database = new Database(dbPath);
     statistics = new Statistics(database);
 
-    // Give database time to initialize
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for database to finish initialising; surface errors immediately.
+    try {
+      await database.waitForInit();
+    } catch (dbErr) {
+      logger.error("Database failed to initialize", dbErr);
+      await vscode.window.showErrorMessage(
+        `Copilot Tracker: Database initialization failed — ${dbErr instanceof Error ? dbErr.message : String(dbErr)}. Token usage will NOT be saved.`
+      );
+      // Continue activation so commands/UI still register (they will show errors if used).
+    }
 
     // Initialize session
     sessionManager.startSession();
@@ -69,7 +79,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     registerWebview(context);
 
     // Register chat participant (@tracker)
-    registerChatParticipant(context, database);
+    registerChatParticipant(context, database, dashboardProvider);
+
+    // Start hook bridge — captures Ask / Agent mode prompts automatically
+    hookBridge.start(database, dashboardProvider).catch((err) =>
+      logger.error("HookBridge failed to start", err)
+    );
 
     // Watch for settings changes
     const settingsWatcher = ConfigUtils.onSettingsChange((newSettings) => {
@@ -117,6 +132,7 @@ export function deactivate(): void {
       // Tree provider cleanup handled by VS Code
     }
 
+    hookBridge.stop();
     sessionManager.endCurrentSession();
     logger.info("Copilot Usage Tracker extension deactivated");
   } catch (error) {
@@ -215,7 +231,8 @@ function registerStatusBar(context: vscode.ExtensionContext): void {
  */
 function registerWebview(context: vscode.ExtensionContext): void {
   try {
-    const provider = new DashboardProvider(context, database, statistics);
+    dashboardProvider = new DashboardProvider(context, database, statistics);
+    const provider = dashboardProvider;
 
     const disposable = vscode.window.registerWebviewViewProvider(
       DashboardProvider.viewType,

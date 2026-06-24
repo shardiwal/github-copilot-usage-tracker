@@ -59,6 +59,13 @@ export class Database {
   }
 
   /**
+   * Public method to await database initialization. Throws if initialization failed.
+   */
+  public async waitForInit(): Promise<void> {
+    await this.initialized;
+  }
+
+  /**
    * Create required tables
    */
   private createTables(): void {
@@ -80,6 +87,8 @@ export class Database {
         totalTokens INTEGER NOT NULL,
         duration INTEGER NOT NULL,
         sessionId TEXT NOT NULL,
+        model TEXT NOT NULL DEFAULT '',
+        cost REAL NOT NULL DEFAULT 0,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -96,11 +105,25 @@ export class Database {
       this.db.run(usageTableSQL);
       this.db.run(settingsTableSQL);
 
+      // Migrate existing databases: add columns if they don't exist yet
+      const migrations = [
+        "ALTER TABLE usage ADD COLUMN model TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE usage ADD COLUMN cost REAL NOT NULL DEFAULT 0",
+      ];
+      migrations.forEach((sql) => {
+        try {
+          this.db!.run(sql);
+        } catch (_e) {
+          // Column already exists — ignore
+        }
+      });
+
       const indexSQLs = [
         "CREATE INDEX IF NOT EXISTS idx_timestamp ON usage(timestamp)",
         "CREATE INDEX IF NOT EXISTS idx_workspace ON usage(workspace)",
         "CREATE INDEX IF NOT EXISTS idx_language ON usage(language)",
         "CREATE INDEX IF NOT EXISTS idx_sessionId ON usage(sessionId)",
+        "CREATE INDEX IF NOT EXISTS idx_model ON usage(model)",
       ];
 
       indexSQLs.forEach((sql) => {
@@ -134,6 +157,43 @@ export class Database {
   }
 
   /**
+   * Update output/total tokens, duration, and cost on the most-recent record
+   * that belongs to the given session (created by the HookBridge on
+   * UserPromptSubmit).  A no-op when no matching record exists.
+   */
+  public async updateUsageRecordBySession(
+    sessionId: string,
+    outputTokens: number,
+    totalTokens: number,
+    duration: number,
+    cost: number
+  ): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error("Database not initialized");
+
+    try {
+      this.db.run(
+        `UPDATE usage
+            SET outputTokens = ?,
+                totalTokens   = ?,
+                duration      = ?,
+                cost          = ?
+          WHERE id = (
+            SELECT id FROM usage
+             WHERE sessionId = ?
+             ORDER BY id DESC
+             LIMIT 1
+          )`,
+        [outputTokens, totalTokens, duration, cost, sessionId]
+      );
+      this.save();
+      logger.debug("HookBridge: updated session record", { sessionId, outputTokens, duration });
+    } catch (error) {
+      logger.error("Failed to update usage record by session", error);
+    }
+  }
+
+  /**
    * Add a usage record
    */
   public async addUsageRecord(record: Omit<UsageRecord, "id">): Promise<number> {
@@ -147,8 +207,9 @@ export class Database {
       const stmt = this.db.prepare(`
         INSERT INTO usage (
           timestamp, workspace, language, file, prompt, response,
-          inputTokens, outputTokens, totalTokens, duration, sessionId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          inputTokens, outputTokens, totalTokens, duration, sessionId,
+          model, cost
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       stmt.bind([
@@ -163,6 +224,8 @@ export class Database {
         record.totalTokens,
         record.duration,
         record.sessionId,
+        record.model ?? '',
+        record.cost ?? 0,
       ]);
 
       stmt.step();
