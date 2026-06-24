@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copilot Usage Tracker Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📊 Copilot Usage Tracker Dashboard</h1>
+            <div class="header-controls">
+                <select id="filterSelect" class="filter-select">
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="7days">Last 7 Days</option>
+                    <option value="30days">Last 30 Days</option>
+                    <option value="all">All Time</option>
+                </select>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Quick Stats Section -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Today's Tokens</div>
+                        <div class="stat-value" id="todayTokens">-</div>
+                        <div class="stat-detail" id="todayTokensDetail"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">💬</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Today's Requests</div>
+                        <div class="stat-value" id="todayRequests">-</div>
+                        <div class="stat-detail" id="todayAvgTokens"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📤</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Input Tokens</div>
+                        <div class="stat-value" id="inputTokens">-</div>
+                        <div class="stat-detail" id="inputTokensPercentage"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📥</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Output Tokens</div>
+                        <div class="stat-value" id="outputTokens">-</div>
+                        <div class="stat-detail" id="outputTokensPercentage"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-container">
+                    <h2>Daily Usage Trend</h2>
+                    <canvas id="dailyChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h2>Hourly Heatmap</h2>
+                    <canvas id="hourlyChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Analytics Section -->
+            <section class="analytics-section">
+                <div class="analytics-row">
+                    <div class="analytics-card">
+                        <h3>Top Languages</h3>
+                        <div id="topLanguages" class="list-container"></div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <h3>Top Workspaces</h3>
+                        <div id="topWorkspaces" class="list-container"></div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <h3>Top Files</h3>
+                        <div id="topFiles" class="list-container"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History Section -->
+            <section class="history-section">
+                <h2>Recent Requests</h2>
+                <div class="controls">
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search requests...">
+                    <select id="languageFilter" class="filter-select">
+                        <option value="">All Languages</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="historyTable" class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Language</th>
+                                <th>Input</th>
+                                <th>Output</th>
+                                <th>Total</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <tr><td colspan="6" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <button id="prevBtn" class="btn btn-secondary" disabled>← Previous</button>
+                    <span id="pageInfo">Page 1</span>
+                    <button id="nextBtn" class="btn btn-secondary">Next →</button>
+                </div>
+            </section>
+
+            <!-- Export Section -->
+            <section class="export-section">
+                <h2>Export Data</h2>
+                <div class="export-buttons">
+                    <button id="exportCsvBtn" class="btn btn-success">📥 Export CSV</button>
+                    <button id="exportJsonBtn" class="btn btn-success">📥 Export JSON</button>
+                    <button id="backupDbBtn" class="btn btn-success">💾 Backup Database</button>
+                    <button id="clearHistoryBtn" class="btn btn-danger">🗑️ Clear History</button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Copilot Usage Tracker • Last updated: <span id="lastUpdated">-</span></p>
+        </footer>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

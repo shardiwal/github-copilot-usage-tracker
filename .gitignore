@@ -1,0 +1,49 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+out/
+dist/
+*.js.map
+*.d.ts.map
+
+# VS Code
+.vscode/
+.vscode-test/
+*.vsix
+
+# Extension dependencies
+*.db
+.vscode-copilot-tracker/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp files
+*.tmp
+*.bak
+.temp/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Misc
+.eslintcache
+tsc.log

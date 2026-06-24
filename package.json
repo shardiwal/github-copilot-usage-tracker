@@ -1,0 +1,186 @@
+{
+  "name": "copilot-usage-tracker",
+  "displayName": "Copilot Usage Tracker",
+  "description": "Track and estimate GitHub Copilot token usage for every chat request",
+  "version": "0.1.5",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Other",
+    "Analytics"
+  ],
+  "keywords": [
+    "copilot",
+    "token",
+    "tracker",
+    "usage",
+    "analytics"
+  ],
+  "author": {
+    "name": "VS Code Extension Developer"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/copilot-usage-tracker"
+  },
+  "publisher": "vscodedev",
+  "icon": "resources/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copilot-tracker.ask",
+        "title": "Copilot Tracker: Ask Copilot",
+        "category": "Copilot Tracker"
+      },
+      {
+        "command": "copilot-tracker.dashboard",
+        "title": "Copilot Tracker: Open Dashboard",
+        "category": "Copilot Tracker",
+        "icon": "$(chart-bar)"
+      },
+      {
+        "command": "copilot-tracker.exportCsv",
+        "title": "Copilot Tracker: Export CSV",
+        "category": "Copilot Tracker"
+      },
+      {
+        "command": "copilot-tracker.exportJson",
+        "title": "Copilot Tracker: Export JSON",
+        "category": "Copilot Tracker"
+      },
+      {
+        "command": "copilot-tracker.clearHistory",
+        "title": "Copilot Tracker: Clear History",
+        "category": "Copilot Tracker"
+      },
+      {
+        "command": "copilot-tracker.diagnostic",
+        "title": "Copilot Tracker: Run Diagnostics",
+        "category": "Copilot Tracker",
+        "icon": "$(debug-console)"
+      },
+      {
+        "command": "copilot-tracker.refresh",
+        "title": "Copilot Tracker: Refresh",
+        "category": "Copilot Tracker",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "copilot-usage-view-container",
+          "title": "Copilot Usage",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "copilot-usage-view-container": [
+        {
+          "id": "copilot-usage-tree",
+          "name": "Usage Analytics"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "copilot-tracker.tracker",
+        "name": "tracker",
+        "fullName": "Copilot Usage Tracker",
+        "description": "Ask Copilot via @tracker — every request/response is tracked and recorded",
+        "isSticky": false
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "copilot-tracker.refresh",
+          "when": "view == copilot-usage-tree",
+          "group": "navigation"
+        },
+        {
+          "command": "copilot-tracker.dashboard",
+          "when": "view == copilot-usage-tree",
+          "group": "navigation"
+        },
+        {
+          "command": "copilot-tracker.diagnostic",
+          "when": "view == copilot-usage-tree",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Copilot Usage Tracker",
+      "properties": {
+        "tracker.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the Copilot Usage Tracker"
+        },
+        "tracker.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show token count in status bar"
+        },
+        "tracker.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show token usage notifications"
+        },
+        "tracker.autoExport": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically export data periodically"
+        },
+        "tracker.databaseLocation": {
+          "type": "string",
+          "default": "",
+          "description": "Custom database location (leave empty for default)"
+        },
+        "tracker.maxHistory": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of records to keep in history"
+        },
+        "tracker.notificationThresholds": {
+          "type": "array",
+          "default": [
+            100000,
+            250000,
+            500000
+          ],
+          "description": "Token thresholds for daily notifications"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:sql.js --external:tiktoken --platform=node --format=cjs --minify && node scripts/copy-wasm.js",
+    "dev": "node scripts/copy-wasm.js && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:sql.js --external:tiktoken --platform=node --format=cjs --watch",
+    "lint": "eslint src --ext ts --fix",
+    "compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/sql.js": "^1.4.11",
+    "@types/vscode": "^1.105.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "esbuild": "^0.19.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "sql.js": "^1.8.0",
+    "tiktoken": "^1.0.0"
+  }
+}

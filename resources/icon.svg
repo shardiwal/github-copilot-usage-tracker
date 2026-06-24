@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background -->
+  <rect width="128" height="128" fill="#0e639c" rx="8"/>
+  
+  <!-- Chart bar icon -->
+  <g fill="#ffffff">
+    <!-- Bar 1 -->
+    <rect x="20" y="60" width="16" height="48" rx="2"/>
+    <!-- Bar 2 -->
+    <rect x="44" y="40" width="16" height="68" rx="2"/>
+    <!-- Bar 3 -->
+    <rect x="68" y="50" width="16" height="58" rx="2"/>
+    <!-- Bar 4 -->
+    <rect x="92" y="30" width="16" height="78" rx="2"/>
+  </g>
+  
+  <!-- Zap icon for tokens -->
+  <g fill="#ffd700" transform="translate(64, 20)">
+    <path d="M 0 -8 L -4 0 L 2 0 L -2 8 L 4 0 L -2 0 Z"/>
+  </g>
+</svg>
